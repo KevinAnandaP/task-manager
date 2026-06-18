@@ -1,0 +1,61 @@
+# =========================================================================
+# FILE CONFIGURATION PIPELINE GITLAB CI/CD (.gitlab-ci.yml)
+# Taruh file ini di root direktori repositori Anda.
+# =========================================================================
+
+# Mendefinisikan tahapan-tahapan pipeline
+stages:
+  - test
+  - deploy
+
+# -------------------------------------------------------------------------
+# STAGE 1: TESTING (Menjalankan uji sintaks & tes unit)
+# -------------------------------------------------------------------------
+run_tests:
+  stage: test
+  # Menggunakan image Node.js versi 18-alpine yang ringan
+  image: node:18-alpine
+  script:
+    - npm ci # Install clean dependencies (lebih cepat & aman untuk CI/CD)
+    - npm test # Menjalankan skrip test yang ada di package.json
+  # Opsional: jalankan di cabang manapun saat ada push1
+  only:
+    - merge_requests
+    - main
+    - dev
+
+# -------------------------------------------------------------------------
+# STAGE 2: DEPLOYMENT (Mengirim instruksi update ke VPS via SSH)
+# -------------------------------------------------------------------------
+deploy_to_vps:
+  stage: deploy
+  # Menggunakan image Alpine Linux terkecil untuk menghemat resource
+  image: alpine:latest
+  before_script:
+    # 1. Install openssh-client di dalam kontainer Runner Alpine
+    - apk add --no-cache openssh-client
+    
+    # 2. Jalankan ssh-agent
+    - eval $(ssh-agent -s)
+    
+    # 3. Masukkan SSH Private Key (dari GitLab CI/CD Variables) ke ssh-agent
+    # tr -d '\r' digunakan untuk menghapus karakter carriage return Windows agar tidak error di Linux
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    
+    # 4. Buat folder konfigurasi SSH
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    
+    # 5. Konfigurasi agar mengabaikan Host Key Checking saat koneksi pertama kali.
+    # Catatan Wawancara: Pada lingkungan production asli, sebaiknya gunakan ssh-keyscan untuk keamanan,
+    # namun penulisan 'StrictHostKeyChecking no' sangat umum digunakan untuk kemudahan demo.
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+  script:
+    # SSH ke VPS menggunakan custom port (default ke port 22 jika variabel VPS_PORT tidak diset),
+    # masuk ke folder projek, tarik kode terbaru (git pull), lalu perintahkan docker compose untuk rebuild.
+    - ssh -p ${VPS_PORT:-22} $VPS_USER@$VPS_IP "cd $PROJECT_PATH && git pull origin main && docker compose up -d --build"
+  
+  # Deploy HANYA berjalan jika kode berhasil masuk ke branch main (setelah pull request atau push langsung)
+  only:
+    - main

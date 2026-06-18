@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aslab-express-app
+    restart: always
+    ports:
+      # Memetakan port 3000 kontainer ke port 3000 host VPS agar dapat diakses langsung via IP VPS
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=mysecurepassword123
+      - DB_NAME=aslab_db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    container_name: aslab-postgres-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=mysecurepassword123
+      - POSTGRES_DB=aslab_db
+    volumes:
+      # Menyimpan data database secara persisten di host
+      - pgdata:/var/lib/postgresql/data
+    # Healthcheck untuk memastikan database siap menerima koneksi
+    # sebelum Express app dijalankan
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aslab_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

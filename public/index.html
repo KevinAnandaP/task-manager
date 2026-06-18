@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+  <header>
+    <h1>Task Manager</h1>
+  </header>
+
+  <div class="container">
+    <!-- Form Tambah Todo -->
+    <div class="card">
+      <div class="card-title">Tambah Tugas Baru</div>
+      
+      <form id="todoForm">
+        <div class="form-group">
+          <label for="title">Judul</label>
+          <input type="text" id="title" class="form-control" placeholder="Judul tugas..." required autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="description">Deskripsi</label>
+          <textarea id="description" class="form-control" placeholder="Deskripsi tugas (opsional)..."></textarea>
+        </div>
+        <button type="submit" class="btn">Simpan Tugas</button>
+      </form>
+    </div>
+
+    <!-- List Todo -->
+    <div class="card">
+      <div class="card-title">Daftar Tugas</div>
+      <div id="todoList" class="task-list">
+        <div class="empty-state">Memuat data tugas...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const todoForm = document.getElementById('todoForm');
+    const todoList = document.getElementById('todoList');
+
+    // Ambil Data dari API
+    async function fetchTodos() {
+      try {
+        const res = await fetch('/api/todos');
+        const data = await res.json();
+        renderTodos(data);
+      } catch (err) {
+        todoList.innerHTML = '<div class="empty-state" style="color: var(--danger)">Gagal memuat data dari database.</div>';
+      }
+    }
+
+    // Render Data ke UI
+    function renderTodos(todos) {
+      if (todos.length === 0) {
+        todoList.innerHTML = '<div class="empty-state">Belum ada tugas terdaftar.</div>';
+        return;
+      }
+
+      todoList.innerHTML = '';
+      todos.forEach(todo => {
+        const item = document.createElement('div');
+        item.className = `task-item ${todo.completed ? 'task-completed' : ''}`;
+        item.innerHTML = `
+          <div class="checkbox-container">
+            <input type="checkbox" class="task-checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleComplete(${todo.id}, this.checked)">
+          </div>
+          <div class="task-content">
+            <div class="task-title">${escapeHTML(todo.title)}</div>
+            ${todo.description ? `<div class="task-desc">${escapeHTML(todo.description)}</div>` : ''}
+          </div>
+          <button class="btn-delete" onclick="deleteTodo(${todo.id})">Hapus</button>
+        `;
+        todoList.appendChild(item);
+      });
+    }
+
+    // Tambah Todo
+    todoForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('title').value;
+      const description = document.getElementById('description').value;
+
+      try {
+        const res = await fetch('/api/todos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, description })
+        });
+        
+        if (res.ok) {
+          todoForm.reset();
+          fetchTodos();
+        }
+      } catch (err) {
+      }
+    });
+
+    // Toggle Status Selesai
+    async function toggleComplete(id, completed) {
+      try {
+        const res = await fetch(`/api/todos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ completed })
+        });
+        
+        if (res.ok) {
+          fetchTodos();
+        }
+      } catch (err) {
+      }
+    }
+
+    // Hapus Todo
+    async function deleteTodo(id) {
+      try {
+        const res = await fetch(`/api/todos/${id}`, {
+          method: 'DELETE'
+        });
+        
+        if (res.ok) {
+          fetchTodos();
+        }
+      } catch (err) {
+      }
+    }
+
+    // Helper mencegah XSS
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    // Load data awal
+    fetchTodos();
+  </script>
+</body>
+</html>
